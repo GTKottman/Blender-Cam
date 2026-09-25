@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "blender-cam-mcp"
+version = "1.0.0"
+description = "MCP server that lets AI assistants frame, move and animate Blender cameras"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
+keywords = ["blender", "mcp", "camera", "animation", "cinematography", "ai"]
+dependencies = ["mcp>=1.2"]
+
+[project.scripts]
+blender-cam-mcp = "blender_cam_mcp_server.server:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "bpy"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/blender_cam_mcp_server"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

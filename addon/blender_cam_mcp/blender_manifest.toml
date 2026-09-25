@@ -1,0 +1,18 @@
+schema_version = "1.0.0"
+
+id = "blender_cam_mcp"
+version = "1.0.0"
+name = "Camera MCP"
+tagline = "Let AI assistants frame, move and animate cameras over MCP"
+maintainer = "Blender-Cam contributors"
+type = "add-on"
+
+tags = ["Camera", "Animation"]
+
+blender_version_min = "4.2.0"
+
+license = ["SPDX:GPL-3.0-or-later"]
+
+[permissions]
+network = "Local TCP server that receives camera commands from the MCP bridge"
+files = "Writes preview renders to a temporary folder or a path you choose"
