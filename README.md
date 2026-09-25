@@ -114,6 +114,27 @@ Blender timers don't run in background mode, so this script processes the comman
 When Blender runs headless, `engine="AUTO"` renders previews with Cycles at low sample counts,
 because Workbench needs a GPU context.
 
+### 3. (Recommended) Add the camera-director skill
+
+`skills/blender-camera-director` is an [Agent Skill](https://docs.claude.com/en/docs/agents-and-tools/agent-skills)
+that teaches Claude to use these tools like a cinematographer. It covers:
+
+- a survey → plan → set up → verify → animate → review workflow;
+- how to turn a mood into a lens, angle, move and timing;
+- scaling camera moves to the size of the scene;
+- 10 worked shot recipes (turntable, hero reveal, dialogue coverage, drone, chase, …).
+
+To install it:
+
+* **Claude Code**: copy the folder to `~/.claude/skills/` (for all projects) or to
+  `.claude/skills/` in a project.
+* **Claude apps**: upload `dist/blender-camera-director.skill` under Settings → Capabilities →
+  Skills. You can rebuild it with the skill-creator `package_skill` script.
+
+`references/tools.md` is generated from the MCP schemas (`python scripts/gen_skill_reference.py`).
+`tests/test_skill_recipes.py` checks that every tool and parameter the skill mentions exists and
+that each recipe runs in real Blender.
+
 ## Example requests
 
 * *"Give me a slow 8-second push-in on the Statue from a low angle with an 85mm lens, and add

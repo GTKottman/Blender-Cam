@@ -892,6 +892,9 @@ SHOT_SIZES = {
     "extreme_closeup": (0.09, 0.91),
 }
 
+# Target headroom (fraction of frame above the subject's top) for shots that include the head.
+SHOT_HEADROOM = {"medium_wide": 0.08, "cowboy": 0.08, "medium": 0.07, "medium_closeup": 0.06, "closeup": 0.04}
+
 SHOT_ANGLES = {
     # name: (elevation_deg, roll_deg)
     "eye_level": (0.0, 0.0),
@@ -967,6 +970,24 @@ def apply_shot_preset(subject, shot_size="medium", angle="eye_level", side="fron
         adjusted = ("Camera raised to z=%.3f to stay above the subject's base (ground level); "
                     "pass allow_below_base=true to disable." % min_z)
     _set_pose(cam, loc, cm.look_quat(loc, aim, math.radians(roll)), _rotation_state(cam))
+    if shot_size in SHOT_HEADROOM:
+        # Perspective makes the near top of a solid subject project higher than the aim maths
+        # predicts, so measure the real top and raise/lower camera + aim together until the
+        # headroom is right (like a pedestal adjustment on set).
+        want_top = 1.0 - SHOT_HEADROOM[shot_size]
+        points = _object_points(obj, max_points=2000)
+        for _ in range(6):
+            bpy.context.view_layer.update()
+            proj = [world_to_camera_view(_scene(), cam, p) for p in points]
+            ys = [p.y for p in proj if p.z > cam.data.clip_start]
+            if not ys:
+                break
+            err = max(ys) - want_top
+            if abs(err) < 0.005:
+                break
+            dz = Vector((0.0, 0.0, err * visible))
+            loc, aim = loc + dz, aim + dz
+            _set_pose(cam, loc, cm.look_quat(loc, aim, math.radians(roll)), _rotation_state(cam))
     if distance * 2 > cam.data.clip_end:
         cam.data.clip_end = distance * 3
     _maybe_key(cam, keyframe_frame, lens=lens is not None)
@@ -995,12 +1016,25 @@ COMPOSITION_POINTS = {
 }
 
 
-def _aim_for_screen_point(loc, target, sx, sy, cam_data, roll=0.0):
-    """Orientation (level horizon + roll) placing ``target`` at screen (sx, sy)."""
+HORIZONTAL_ONLY = {"left_third", "right_third", "golden_left", "golden_right"}
+VERTICAL_ONLY = {"upper_third", "lower_third"}
+
+
+def _aim_for_screen_point(loc, target, sx, sy, cam_data, roll=0.0, lock=None, quat0=None):
+    """Orientation (level horizon + roll) placing ``target`` at screen (sx, sy).
+
+    ``lock="pitch"`` only pans (keeps the tilt of ``quat0``); ``lock="heading"`` only tilts.
+    """
     hfov, vfov = cm.camera_fov(cam_data, _scene())
     tx = (sx - 0.5) * 2.0 * math.tan(hfov / 2.0)
     ty = (sy - 0.5) * 2.0 * math.tan(vfov / 2.0)
     heading, pitch = cm.heading_pitch(target - loc)
+    if lock and quat0 is not None:
+        cur_heading, cur_pitch = cm.heading_pitch(cm.camera_axes(quat0)[0])
+        if lock == "pitch":
+            pitch = cur_pitch
+        else:
+            heading = cur_heading
     quat = cm.direction_quat(cm.direction_from_heading_pitch(heading, pitch), roll)
     for _ in range(12):
         v = quat.inverted() @ (target - loc)
@@ -1010,8 +1044,16 @@ def _aim_for_screen_point(loc, target, sx, sy, cam_data, roll=0.0):
         cy = v.y / -v.z
         if abs(cx - tx) < 1e-6 and abs(cy - ty) < 1e-6:
             break
-        heading += math.atan(tx) - math.atan(cx)
-        pitch -= math.atan(ty) - math.atan(cy)
+        if lock == "pitch":
+            if abs(cx - tx) < 1e-6:
+                break
+        elif lock == "heading":
+            if abs(cy - ty) < 1e-6:
+                break
+        if lock != "heading":
+            heading += math.atan(tx) - math.atan(cx)
+        if lock != "pitch":
+            pitch -= math.atan(ty) - math.atan(cy)
         pitch = max(-math.pi / 2 + 1e-3, min(math.pi / 2 - 1e-3, pitch))
         quat = cm.direction_quat(cm.direction_from_heading_pitch(heading, pitch), roll)
     return quat
@@ -1022,20 +1064,29 @@ def compose_subject(subject, position="left_third", screen_x=None, screen_y=None
                     keep_roll=True, keyframe_frame=None):
     """Rotate the camera (in place) so a subject lands on a composition point (rule of thirds etc.)."""
     cam = _get_camera(camera)
+    loc, quat0 = _pose(cam)
+    target = _resolve_point(subject)
+    lock = None
     if screen_x is None or screen_y is None:
         try:
             sx, sy = COMPOSITION_POINTS[position]
         except KeyError:
             raise CommandError("position must be one of %s (or give screen_x/screen_y)"
                                % list(COMPOSITION_POINTS)) from None
+        # Thirds *lines* only constrain one axis, so they are a pure pan (or tilt): e.g.
+        # "left_third" must not re-tilt a close-up and cut off the head.
+        current = world_to_camera_view(_scene(), cam, target)
+        if current.z > 0:
+            if position in HORIZONTAL_ONLY and screen_y is None:
+                sy, lock = current.y, "pitch"
+            elif position in VERTICAL_ONLY and screen_x is None:
+                sx, lock = current.x, "heading"
         sx = sx if screen_x is None else float(screen_x)
         sy = sy if screen_y is None else float(screen_y)
     else:
         sx, sy = float(screen_x), float(screen_y)
-    loc, quat0 = _pose(cam)
-    target = _resolve_point(subject)
     roll = cm.camera_roll(quat0) if keep_roll else 0.0
-    quat = _aim_for_screen_point(loc, target, sx, sy, cam.data, roll)
+    quat = _aim_for_screen_point(loc, target, sx, sy, cam.data, roll, lock, quat0)
     _set_pose(cam, loc, quat, _rotation_state(cam))
     _maybe_key(cam, keyframe_frame)
     bpy.context.view_layer.update()

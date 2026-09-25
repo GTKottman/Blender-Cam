@@ -373,7 +373,9 @@ def compose_subject(
     keyframe_frame: Annotated[Optional[int], D(KEYFRAME)] = None,
 ) -> str:
     """Pan/tilt the camera (without moving it) so the subject sits on a rule-of-thirds / golden
-    point or any screen position. Tip: leave look room on the side the subject faces."""
+    point or any screen position. Line positions (left/right_third, golden_left/right) only move the
+    subject horizontally and keep its current height in frame; upper/lower_third only move it
+    vertically; corner points and center set both. Tip: leave look room on the side the subject faces."""
     return _out(_call("compose_subject", subject=subject, position=position, screen_x=screen_x,
                       screen_y=screen_y, camera=camera, keep_roll=keep_roll, keyframe_frame=keyframe_frame))
 

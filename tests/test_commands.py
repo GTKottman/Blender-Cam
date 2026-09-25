@@ -78,7 +78,22 @@ def test_frame_objects_ortho(run):
     assert f["visibility"] == "fully_in_frame"
 
 
-@pytest.mark.parametrize("position,expected", [("left_third", (1 / 3, 0.5)),
+def test_compose_line_keeps_other_axis(run):
+    cube = bpy.data.objects["Cube"]
+    cube.scale = (0.25, 0.15, 0.9)  # person-sized box
+    bpy.context.view_layer.update()
+    run("apply_shot_preset", {"subject": "Cube", "shot_size": "medium_closeup"})
+    before = _project((0, 0, 0))
+    headroom = _framing(run("apply_shot_preset", {"subject": "Cube", "shot_size": "medium_closeup"}))["headroom"]
+    out = run("compose_subject", {"subject": "Cube", "position": "left_third"})
+    after = _project((0, 0, 0))
+    assert after.x == pytest.approx(1 / 3, abs=1e-3)
+    assert after.y == pytest.approx(before.y, abs=0.02)  # pure pan: tiny perspective drift only
+    assert _framing(out)["headroom"] == pytest.approx(headroom, abs=0.02)
+    assert _framing(out)["headroom"] > 0
+
+
+@pytest.mark.parametrize("position,expected", [("lower_left_third", (1 / 3, 1 / 3)),
                                                ("upper_right_third", (2 / 3, 2 / 3)),
                                                ("center", (0.5, 0.5))])
 def test_compose_subject(run, position, expected):
@@ -100,6 +115,15 @@ def test_shot_preset_sizes(run):
     assert cam.matrix_world.translation.x > 1  # subject faces -Y, so its left side is +X
     assert run("get_camera_info", {})["pitch_deg"] == pytest.approx(-25, abs=0.5)
     assert high["shot"]["side"] == "left"
+
+
+@pytest.mark.parametrize("size,headroom", [("medium", 0.07), ("medium_closeup", 0.06), ("closeup", 0.04)])
+def test_shot_preset_headroom(run, size, headroom):
+    cube = bpy.data.objects["Cube"]
+    cube.scale = (0.25, 0.15, 0.9)  # person-sized box
+    bpy.context.view_layer.update()
+    f = _framing(run("apply_shot_preset", {"subject": "Cube", "shot_size": size}))
+    assert f["headroom"] == pytest.approx(headroom, abs=0.01)
 
 
 def test_shot_preset_low_angle_stays_above_ground(run):
